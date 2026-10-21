@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#a64d79">
   <title>Velora | طلبيتك بكل أناقة</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 
   <style>
     * { box-sizing: border-box; }
@@ -221,25 +221,31 @@
   <footer>Velora ♡ اختاري ما يشبه أناقتك</footer>
 
   <script>
-    // ضعي رابط مشروعك الحقيقي من Supabase هنا.
-    const SUPABASE_URL = "https://YOUR_PROJECT_REF.supabase.co";https://rogrvbgbrafuyzzxwsjf.supabase.co/rest/v1/
+    // رابط المشروع الأساسي فقط (بدون /rest/v1/)
+    const SUPABASE_URL = "https://rogrvbgbrafuyzzxwsjf.supabase.co";
 
     // المفتاح العام publishable الخاص بمشروعك.
-    const SUPABASE_KEY =
-      "sb_publishable_CdWiOyTti7pEh0Q4lvbpDQ_zI6_r-z2";
+    const SUPABASE_KEY = "sb_publishable_CdWiOyTti7pEh0Q4lvbpDQ_zI6_r-z2";
 
     const STORAGE_BUCKET = "product-images";
 
-    const client = window.supabase.createClient(
-      SUPABASE_URL,
-      SUPABASE_KEY
-    );
+    const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     const form = document.getElementById("orderForm");
     const photoInput = document.getElementById("photos");
     const preview = document.getElementById("preview");
     const submitBtn = document.getElementById("submitBtn");
     const message = document.getElementById("message");
+
+    const MAX_SIZE = 5 * 1024 * 1024;
+
+    function uuid() {
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0;
+        return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+      });
+    }
 
     function showMessage(text, success = false) {
       message.style.display = "block";
@@ -261,7 +267,7 @@
           return;
         }
 
-        if (file.size > 5 * 1024 * 1024) {
+        if (file.size > MAX_SIZE) {
           showMessage("حجم كل صورة لازم ما يفوتش 5 ميغابايت.");
           photoInput.value = "";
           preview.replaceChildren();
@@ -288,11 +294,6 @@
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
 
-      if (SUPABASE_URL.includes("YOUR_PROJECT_REF")) {
-        showMessage("لازم تضيفي رابط مشروع Supabase الحقيقي قبل الإرسال.");
-        return;
-      }
-
       const files = Array.from(photoInput.files || []);
 
       if (files.length === 0) {
@@ -300,8 +301,7 @@
         return;
       }
 
-      if (files.some(file => !file.type.startsWith("image/") ||
-                             file.size > 5 * 1024 * 1024)) {
+      if (files.some(file => !file.type.startsWith("image/") || file.size > MAX_SIZE)) {
         showMessage("تأكدي أن الملفات صور، وحجم كل صورة لا يتجاوز 5 ميغابايت.");
         return;
       }
@@ -313,20 +313,14 @@
       const uploadedPaths = [];
 
       try {
-        const productName =
-          document.getElementById("productName").value.trim();
-        const productLink =
-          document.getElementById("productLink").value.trim();
-        const productDetails =
-          document.getElementById("productDetails").value.trim();
-        const customerName =
-          document.getElementById("customerName").value.trim();
+        const productName = document.getElementById("productName").value.trim();
+        const productLink = document.getElementById("productLink").value.trim();
+        const productDetails = document.getElementById("productDetails").value.trim();
+        const customerName = document.getElementById("customerName").value.trim();
         const phone = document.getElementById("phone").value.trim();
         const wilaya = document.getElementById("wilaya").value.trim();
-        const municipality =
-          document.getElementById("municipality").value.trim();
-        const address =
-          document.getElementById("address").value.trim();
+        const municipality = document.getElementById("municipality").value.trim();
+        const address = document.getElementById("address").value.trim();
         const payment = document.getElementById("payment").value;
 
         // رفع الصور إلى Supabase Storage أولاً.
@@ -335,7 +329,7 @@
             .replace(/[^a-zA-Z0-9._-]/g, "_")
             .slice(-100);
 
-          const path = `${crypto.randomUUID()}-${safeName}`;
+          const path = `${uuid()}-${safeName}`;
 
           const { error: uploadError } = await client.storage
             .from(STORAGE_BUCKET)
@@ -359,7 +353,7 @@
         ].filter(Boolean).join(" - ");
 
         const order = {
-          id: crypto.randomUUID(),
+          id: uuid(),
           created_at: new Date().toISOString(),
           customer_name: customerName,
           customer_phone: phone,
@@ -397,15 +391,11 @@
         preview.replaceChildren();
 
       } catch (error) {
-  console.error("Order submission error:", error);
-
-  showMessage(
-    "❌ فشل إرسال الطلب: " +
-    (error?.message || String(error))
-  );
-} finally {
-  submitBtn.disabled = false;
-  submitBtn.textContent = "إرسال الطلب";
+        console.error("Order submission error:", error);
+        showMessage("❌ فشل إرسال الطلب: " + (error?.message || String(error)));
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "إرسال الطلب";
       }
     });
   </script>
