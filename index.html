@@ -329,75 +329,137 @@
             .replace(/[^a-zA-Z0-9._-]/g, "_")
             .slice(-100);
 
-          const path = `${uuid()}-${safeName}`;
+const form = document.getElementById("orderForm");
+const photoInput = document.getElementById("photos");
+const preview = document.getElementById("preview");
+const submitBtn = document.getElementById("submitBtn");
+const message = document.getElementById("message");
 
-          const { error: uploadError } = await client.storage
-            .from(STORAGE_BUCKET)
-            .upload(path, file, {
-              cacheControl: "3600",
-              upsert: false,
-              contentType: file.type
-            });
+const FUNCTION_URL = "PASTE_YOUR_FUNCTION_URL_HERE";
+const MAX_TOTAL_SIZE = 5 * 1024 * 1024;
+const MAX_PHOTOS = 5;
 
-          if (uploadError) {
-            throw new Error("تعذر رفع الصور: " + uploadError.message);
-          }
+function showMessage(text, success = false) {
+  message.style.display = "block";
+  message.textContent = text;
+  message.style.background = success ? "#eaf8ef" : "#fff0f0";
+  message.style.color = success ? "#176538" : "#a12626";
+}
 
-          uploadedPaths.push(path);
-        }
+photoInput.addEventListener("change", () => {
+  preview.replaceChildren();
+  const files = Array.from(photoInput.files || []);
+  const total = files.reduce((sum, file) => sum + file.size, 0);
 
-        const fullAddress = [
-          `الولاية: ${wilaya}`,
-          `البلدية: ${municipality}`,
-          address ? `العنوان: ${address}` : ""
-        ].filter(Boolean).join(" - ");
+  if (files.length > MAX_PHOTOS) {
+    showMessage("اختاري 5 صور كحد أقصى.");
+    photoInput.value = "";
+    return;
+  }
 
-        const order = {
-          id: uuid(),
-          created_at: new Date().toISOString(),
-          customer_name: customerName,
-          customer_phone: phone,
-          customer_address: fullAddress,
-          product_name: productName,
-          product_details:
-            `${productDetails}\nرابط المنتج: ${productLink || "غير متوفر"}`,
-          image_path: uploadedPaths.join(","),
-          status: "new",
-          payment_method: payment,
-          items: [{
-            product_name: productName,
-            product_link: productLink || null,
-            product_details: productDetails,
-            image_paths: uploadedPaths,
-            payment_method: payment
-          }]
-        };
+  if (files.some(file =>
+    !["image/jpeg", "image/png", "image/webp"].includes(file.type)
+  )) {
+    showMessage("اختاري صور JPG أو PNG أو WEBP فقط.");
+    photoInput.value = "";
+    return;
+  }
 
-        // لا نعلن النجاح إلا إذا نجح الإدخال في قاعدة البيانات.
-        const { error: insertError } = await client
-          .from("orders")
-          .insert(order);
+  if (total > MAX_TOTAL_SIZE) {
+    showMessage("الحجم الإجمالي للصور لازم ما يفوتش 5 ميغابايت.");
+    photoInput.value = "";
+    return;
+  }
 
-        if (insertError) {
-          throw new Error("تعذر تسجيل الطلب: " + insertError.message);
-        }
+  for (const file of files) {
+    const img = document.createElement("img");
+    img.alt = "معاينة صورة المنتج";
+    img.src = URL.createObjectURL(file);
+    preview.appendChild(img);
+  }
 
-        showMessage(
-          "تم تسجيل طلبك بنجاح! ❤️ احتفظي بمعلومات المنتج إلى حين تأكيد السعر والدفع.",
-          true
-        );
+  message.style.display = "none";
+});
 
-        form.reset();
-        preview.replaceChildren();
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
 
-      } catch (error) {
-        console.error("Order submission error:", error);
-        showMessage("❌ فشل إرسال الطلب: " + (error?.message || String(error)));
-      } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = "إرسال الطلب";
-      }
+  const files = Array.from(photoInput.files || []);
+  const total = files.reduce((sum, file) => sum + file.size, 0);
+
+  if (!files.length) {
+    showMessage("أرفقي صورة واحدة على الأقل للمنتج.");
+    return;
+  }
+
+  if (files.length > MAX_PHOTOS || total > MAX_TOTAL_SIZE) {
+    showMessage("اختاري حتى 5 صور، بحجم إجمالي لا يتجاوز 5 ميغابايت.");
+    return;
+  }
+
+  if (FUNCTION_URL === "https://mnwskymgjvuwaijvdqza.supabase.co/functions/v1/rapid-function") {
+    showMessage("لازم نضيفوا رابط الدالة قبل إرسال الطلب.");
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = "جارٍ إرسال الطلب...";
+  message.style.display = "none";
+
+  try {
+    const data = new FormData();
+
+    data.append("name",
+      document.getElementById("customerName").value.trim());
+    data.append("phone",
+      document.getElementById("phone").value.trim());
+    data.append("wilaya",
+      document.getElementById("wilaya").value.trim());
+    data.append("municipality",
+      document.getElementById("municipality").value.trim());
+    data.append("address",
+      document.getElementById("address").value.trim());
+    data.append("product",
+      document.getElementById("productName").value.trim());
+    data.append("details",
+      [
+        document.getElementById("productDetails").value.trim(),
+        "رابط المنتج: " +
+          (document.getElementById("productLink").value.trim() || "غير متوفر")
+      ].join("\n"));
+    data.append("payment",
+      document.getElementById("payment").value);
+
+    for (const file of files) {
+      data.append("photos", file, file.name);
+    }
+
+    const response = await fetch(FUNCTION_URL, {
+      method: "POST",
+      body: data
     });
-  </script>
-</body>
-</html>
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok || !result.success) {
+      throw new Error(
+        result.error || "تعذر إرسال الطلب. حاولي مرة أخرى."
+      );
+    }
+
+    showMessage(
+      "تم استلام طلبك بنجاح ❤️ رقم الطلب: " + result.orderId,
+      true
+    );
+
+    form.reset();
+    preview.replaceChildren();
+
+  } catch (error) {
+    console.error("Order submission error:", error);
+    showMessage("❌ " + (error.message || "حدث خطأ أثناء الإرسال."));
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "إرسال الطلب";
+  }
+});
